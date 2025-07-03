@@ -285,91 +285,134 @@ def main():
         with tab2:
             st.markdown("### ⚖️ Atur Matriks AHP Berpasangan")
             st.markdown("> 📘 *Catatan untuk Investor Pemula:* Geser nilai antar kriteria untuk menyesuaikan bobot.")
-
+            
             # Penjelasan Skala Saaty
             st.markdown("""
-            #### 📐 **Skala Perbandingan Saaty (1–9)**  
-            Gunakan skala berikut saat membandingkan dua kriteria:
-            
-            | Nilai | Arti |
-            |-------|------|
-            | 1     | Sama penting |
-            | 3     | Cukup dominan |
-            | 5     | Dominan |
-            | 7     | Sangat dominan |
-            | 9     | Mutlak dominan |
-            | 2,4,6,8 | Nilai antara |
-            
-            _Contoh: Jika ROE lebih penting daripada Debt to Equity, pilih nilai 5 atau lebih._
-            """)
+            <div style="background-color:#1e3c72; padding:15px; border-radius:10px;">
+                <h4>📐 Skala Perbandingan Saaty (1–9)</h4>
+                <table style="width:100%; color:white; font-size:14px;">
+                    <tr><th>Nilai</th><th>Arti</th></tr>
+                    <tr><td>1</td><td>Sama penting</td></tr>
+                    <tr><td>2</td><td>Sedikit lebih penting</td></tr>
+                    <tr><td>3</td><td>Cukup dominan</td></tr>
+                    <tr><td>4</td><td>Lebih penting</td></tr>
+                    <tr><td>5</td><td>Dominan</td></tr>
+                    <tr><td>6</td><td>Sangat dominan (antara)</td></tr>
+                    <tr><td>7</td><td>Sangat dominan</td></tr>
+                    <tr><td>8</td><td>Hampir mutlak</td></tr>
+                    <tr><td>9</td><td>Mutlak dominan</td></tr>
+                </table>
+                <p style="font-style:italic; font-size:13px; margin-top:10px;">Contoh: Jika ROE lebih penting daripada Debt to Equity, pilih nilai 5 atau lebih.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
             criteria_names = COLUMN_NAMES[1:]
+
             if 'user_matrix' not in st.session_state:
                 st.session_state.user_matrix = DEFAULT_AHP_MATRIX.tolist()
 
             def reset_matrix():
+                # Reset matriks AHP ke default
                 st.session_state.user_matrix = DEFAULT_AHP_MATRIX.tolist()
+                
+                # Hapus semua key slider dari session_state agar tidak tersisa
+                for i in range(len(criteria_names)):
+                    for j in range(i + 1, len(criteria_names)):
+                        key = f"slider_{i}_{j}"
+                        if key in st.session_state:
+                            del st.session_state[key]
+                
+                # Muat ulang halaman
+                st.rerun()
 
-            # Tombol Reset
-            if st.button("🔁 Reset ke Default", use_container_width=True):
-                reset_matrix()
+            col_reset, col_save = st.columns([1, 1])
+            with col_reset:
+                if st.button("🔁 Reset ke Default", use_container_width=True):
+                    reset_matrix()
+            with col_save:
+                if st.download_button(
+                    label="💾 Simpan Matriks",
+                    data=pd.DataFrame(st.session_state.user_matrix, index=criteria_names, columns=criteria_names).to_csv(),
+                    file_name="matriks_ahp.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                ):
+                    st.toast("✅ Matriks berhasil disimpan!")
 
-            # Mapping label ke angka
-            scale_options = {
-                "1 - Sama Penting": 1.0,
-                "2 - Sedikit Lebih Penting": 2.0,
-                "3 - Cukup Dominan": 3.0,
-                "4 - Lebih Penting": 4.0,
-                "5 - Dominan": 5.0,
-                "6 - Sangat Dominan (Antara)": 6.0,
-                "7 - Sangat Dominan": 7.0,
-                "8 - Hampir Mutlak": 8.0,
-                "9 - Mutlak Dominan": 9.0
-            }
+            st.markdown("### 🔍 Bandingkan Pasangan Kriteria")
 
-            # Loop hanya sampai len(criteria_names) - 1 karena kita hindari Operating Margin terakhir
-            for i in range(len(criteria_names) - 1):
-                cols = st.columns(2)
-                idx = 0
-                for j in range(i + 1, len(criteria_names)):
-                    col_label = cols[idx % 2]
-                    col_select = cols[idx % 2]
+            # Generate semua pasangan kriteria berdasarkan kriteria utama
+            for i in range(len(criteria_names)):
+                main_criterion = criteria_names[i]
+                sub_criteria = [criteria_names[j] for j in range(i + 1, len(criteria_names))]
+                if not sub_criteria:
+                    continue
 
-                    with col_label:
-                        st.markdown(f"**{criteria_names[i]} vs {criteria_names[j]}**")
+                with st.expander(f"🔹 {main_criterion} vs Kriteria Lainnya", expanded=False):
+                    for j in range(i + 1, len(criteria_names)):
+                        criterion_a = criteria_names[i]
+                        criterion_b = criteria_names[j]
+                        key = f"slider_{i}_{j}"
 
-                    with col_select:
+                        # Ambil nilai default dari session_state
                         default_value = float(st.session_state.user_matrix[i][j])
-                        
-                        # Cari key berdasarkan value
-                        closest_key = min(scale_options.keys(), key=lambda k: abs(scale_options[k] - default_value))
-                        
-                        choice = st.selectbox(
-                            label="",
-                            options=list(scale_options.keys()),
-                            index=list(scale_options.keys()).index(closest_key),
-                            key=f"select_{i}_{j}",
-                            help=f"Pilih tingkat dominasi {criteria_names[i]} terhadap {criteria_names[j]}"
-                        )
-                        val = scale_options[choice]
-                        st.session_state.user_matrix[i][j] = val
-                        st.session_state.user_matrix[j][i] = 1.0 / (val if val != 0 else 1)
 
-                    idx += 1
+                        cols = st.columns([3, 1])  # Kolom teks dan slider
+                        with cols[0]:
+                            st.markdown(f"🔸 **{criterion_a} vs {criterion_b}**")
+                        with cols[1]:
+                            val = st.slider(
+                                label="",
+                                min_value=1.0,
+                                max_value=9.0,
+                                value=default_value,
+                                step=1.0,
+                                key=key,
+                                help=f"Angka semakin besar berarti '{criterion_a}' lebih dominan dari '{criterion_b}'"
+                            )
+                            st.session_state.user_matrix[i][j] = val
+                            st.session_state.user_matrix[j][i] = 1.0 / (val if val != 0 else 1)
 
+            # Hitung ulang bobot
             user_ahp_matrix = np.array(st.session_state.user_matrix)
             weights = calculate_ahp_weights(user_ahp_matrix)
             consistency = ahp_consistency(user_ahp_matrix)
+            cr_value = consistency['CR']
 
-            if consistency['CR'] > 0.1:
-                st.warning(f"⚠️ Matriks tidak konsisten! CR = {consistency['CR']:.2f}. Harus kurang dari 0.1.")
+            # Info Box untuk CR
+            if cr_value > 0.1:
+                st.warning(f"⚠️ Matriks tidak konsisten! CR = {cr_value:.2f}. Harus kurang dari 0.1.")
             else:
-                st.success(f"✅ Matriks konsisten! CR = {consistency['CR']:.2f}")
+                st.success(f"✅ Matriks konsisten! CR = {cr_value:.2f}")
 
             st.session_state.weights = weights
+
             weight_df = pd.DataFrame({"Bobot": list(weights.values())}, index=criteria_names)
-            fig = px.bar(weight_df, y='Bobot', title='Distribusi Bobot Kriteria (AHP)', color_discrete_sequence=['#3b82f6'])
-            st.plotly_chart(fig, use_container_width=True)
+
+            # Grafik batang distribusi bobot
+            fig_bar = px.bar(
+                weight_df,
+                y='Bobot',
+                title='📊 Distribusi Bobot Kriteria (AHP)',
+                color_discrete_sequence=['#3b82f6'],
+                text_auto='.3f'
+            )
+            fig_bar.update_layout(
+                xaxis_title="Kriteria",
+                yaxis_title="Bobot",
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font=dict(color="white"),
+                height=400,
+                template="plotly_dark"
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+            # Heatmap visualisasi matriks AHP
+            matrix_df = pd.DataFrame(st.session_state.user_matrix, index=criteria_names, columns=criteria_names)
+            fig_heatmap = px.imshow(matrix_df, text_auto=".2f", aspect="auto", title="🔍 Heatmap Matriks AHP", color_continuous_scale='Blues')
+            fig_heatmap.update_layout(template="plotly_dark")
+            st.plotly_chart(fig_heatmap, use_container_width=True)
 
         # Tab 3: Visualisasi
         with tab3:
